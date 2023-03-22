@@ -29,6 +29,10 @@ kairosClient.getTimeStamp(-24*60*60)
 # get data 
 myData = kairosClient.downloader(myTags, startTimeISO, endTimeISO)
 ```
+NOTE: 
+This function uses "first" aggregator, as in it gets first value in a specified timeStempMs. 
+timeStepMs is default 1 minute = 60,000 [ms] 
+So, by default, you would get 1 value in every 1 minute window. 
 
 ```
 # save data
