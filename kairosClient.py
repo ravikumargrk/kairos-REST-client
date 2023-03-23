@@ -149,12 +149,16 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
         #     processed_data.update({
         #         tag : list(df[tag])
         #     })
+        df.index.name = 'time (ISO)'
     return df
 
 def save(dataframe:pd.DataFrame, path = ''):
     data = dataframe.copy()
     start = str(data.index[0])
     end = str(data.index[-1])
+    tzinfo = data.index[0].tzinfo
+    tzOffset = tzinfo.utcoffset(data.index[0]).seconds
+
     if len(data.columns):
         if '_' in data.columns[0]:
             prefix = data.columns[0][:data.columns[0].index('_')]
@@ -163,7 +167,7 @@ def save(dataframe:pd.DataFrame, path = ''):
         filename = f'DATA_{prefix}_({start}-to-{end}).csv'.replace(':', '-')
     
     # convert time
-    data.index = pd.Series([((t.timestamp()*1000+((5*60*60+30*60)*1000))/86400000)+25569 for t in data.index])
+    data.index = pd.Series([((t.timestamp()+tzOffset)/86400)+25569 for t in data.index])
     data.to_csv(filename)
     pass
 
@@ -184,6 +188,7 @@ def plotTimeSeries(df:pd.DataFrame, cols:list=None):
             ax = ax.twinx()
             df.plot(y=col, ax=ax, color=colors[id], marker='.', legend=False)
 
+        ax.set_ylabel(col)
         line, label = ax.get_legend_handles_labels()
         lines += line
         labels += label
