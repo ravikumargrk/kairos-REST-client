@@ -152,7 +152,7 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
         df.index.name = 'time (ISO)'
     return df
 
-def save(dataframe:pd.DataFrame, path = ''):
+def save(dataframe:pd.DataFrame, path = '.'):
     data = dataframe.copy()
     start = str(data.index[0])
     end = str(data.index[-1])
