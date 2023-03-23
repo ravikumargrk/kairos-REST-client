@@ -168,7 +168,9 @@ def save(dataframe:pd.DataFrame, path = ''):
     
     # convert time
     data.index = pd.Series([((t.timestamp()+tzOffset)/86400)+25569 for t in data.index])
-    data.to_csv(filename)
+    if path[-1] != '\\':
+        path += '\\'
+    data.to_csv(path + filename)
     pass
 
 def plotTimeSeries(df:pd.DataFrame, cols:list=None):
