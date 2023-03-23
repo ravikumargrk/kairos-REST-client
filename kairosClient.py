@@ -23,9 +23,6 @@ if None in [KAIROSDB_AUTH_URL, KAIROSDB_QUERY_URL, KAIROSDB_AUTH_USER, KAIROSDB_
     raise RuntimeError("Your container/device does not contain environment variables needed to connect to kairosDB. Read [ReadMe.MD]")
 
 import datetime
-tzinfo = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
-tzOffset = tzinfo.utcoffset(datetime.datetime.utcnow()).seconds
-tzName = tzinfo.tzname(datetime.datetime.utcnow())
 
 def getTimeStamp(seconds_offset_from_now:float=0):
     """
@@ -112,6 +109,7 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
     global STATUS
     global TOKEN
     global KAIROSDB_QUERY_URL
+    tzinfo = datetime.datetime.fromisoformat(startTimeISO).astimezone().tzinfo
 
     payload = {
         "start_absolute": datetime.datetime.fromisoformat(startTimeISO).timestamp()*1000,
