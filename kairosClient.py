@@ -149,6 +149,7 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
         #     processed_data.update({
         #         tag : list(df[tag])
         #     })
+        df.sort_index(inplace=True)
         df.index.name = 'time (ISO)'
     return df
 
