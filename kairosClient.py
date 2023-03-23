@@ -6,6 +6,7 @@ import os
 # module variables
 TOKEN = ''
 STATUS = ''
+LAST_PAYLOAD = {}
 
 # remote url paths
 KAIROSDB_AUTH_URL  = os.environ.get('KAIROSDB_AUTH_URL') 
@@ -41,53 +42,6 @@ def getTimeStamp(seconds_offset_from_now:float=0):
     else:
         return (now + datetime.timedelta(seconds=seconds_offset_from_now)).isoformat()
 
-# def plot_multi(dataDict, cols=None, spacing=.1, title='', **kwargs):
-
-#     data = pd.DataFrame.from_dict(dataDict)
-
-#     from pandas.plotting._matplotlib.style import get_standard_colors
-
-#     # Get default color style from pandas - can be changed to any other color list
-#     if cols is None: cols = list(data.columns)
-#     if len(cols) == 0: return
-#     if '__timeStamp__' in cols:
-#         data['__timeStamp__'] = pd.to_datetime(data['__timeStamp__'], unit='ms', utc=True)
-#         cols.remove('__timeStamp__')
-#     else:
-#         print('No __timeStamp__ axis in data')
-#         return None
-    
-#     colors = get_standard_colors(num_colors=len(cols))
-
-#     # First axis
-#     # ax = data.loc[:, cols[0]].plot(label=cols[0], color=colors[0], **kwargs)
-#     ax = data.plot.scatter('__timeStamp__', cols[0], label=cols[0], color=colors[0], **kwargs)
-#     ax.set_title(title)
-#     ax.set_xlabel('time')
-#     ax.set_ylabel(ylabel=cols[0])
-#     ax.get_legend().remove()
-#     lines, labels = ax.get_legend_handles_labels()
-
-#     for n in range(1, len(cols)):
-#         # Multiple y-axes
-#         ax_new = ax.twinx()
-#         ax_new.spines['right'].set_position(('axes', 1 + spacing * (n - 1)))
-#         # data.loc[:, cols[n]].plot(ax=ax_new, label=cols[n], color=colors[n % len(colors)], **kwargs)
-#         data.plot.scatter('__timeStamp__', cols[n], ax=ax_new, label=cols[n], color=colors[n % len(colors)], **kwargs)
-#         ax_new.set_ylabel(ylabel=cols[n])
-#         ax_new.get_legend().remove()
-
-#         # Proper legend position
-#         line, label = ax_new.get_legend_handles_labels()
-#         lines += line
-#         labels += label
-
-#     ax.legend(lines, labels, loc=0)
-#     return ax
-
-# class kairosAgent():
-
-# Basic function : to login
 lastResponse = {}
 
 def login():
@@ -111,7 +65,8 @@ def runjson(url, body):
     """Runs a POST request and logs in automatically if needed."""
     global STATUS
     global TOKEN
-
+    global LAST_PAYLOAD
+    LAST_PAYLOAD = body
     if TOKEN == '':
         STATUS += '\nCreating a new session ...'
         login()
@@ -136,7 +91,7 @@ def runjson(url, body):
     return lastResponse
 
 # function : to download data into memory
-def downloader(tagList:list, startTimeISO:str, endTimeISO:str, timeStepMs=60000):
+def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
     """
     Gets data for a given tagList & time interval from kairos & returns a dictionary: \n
     ```
@@ -161,30 +116,13 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str, timeStepMs=60000)
     payload = {
         "start_absolute": datetime.datetime.fromisoformat(startTimeISO).timestamp()*1000,
         "end_absolute": datetime.datetime.fromisoformat(endTimeISO).timestamp()*1000,
-        "time_zone" : "Asia/Kolkata",
+        # "time_zone" : "Asia/Kolkata", #? 
         "metrics": []
     }        
-    
-    if timeStepMs <= 1000:
-        timeStepMs = 1000
-        samplingUnit = "seconds"
-    else:
-        timeStepMs = 60000
-        samplingUnit = "minutes"
 
     for tag in tagList:
         metric_schema = {
             "name": tag,
-            # "limit": limit,
-            "aggregators": [
-                {
-                    "name": "first",
-                    "sampling": {
-                        "value": 1,
-                        "unit": samplingUnit
-                    }
-                }
-            ]
         }
         payload['metrics'].append(metric_schema)
 
@@ -193,8 +131,8 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str, timeStepMs=60000)
     response = runjson(KAIROSDB_QUERY_URL, payload)
 
     data = {}
-    processed_data = {}
-
+    # processed_data = {}
+    df = pd.DataFrame({})
     if not response==None:
         for query_index in range(len(response['queries'])):
             query = response['queries'][query_index]
@@ -207,51 +145,31 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str, timeStepMs=60000)
                     data[t].update({tagName:v})
 
         df = pd.DataFrame.from_dict(data, orient='index')
-        processed_data = {'__timeStamp__':list(df.index)}
-        for tag in df.columns:
-            processed_data.update({
-                tag : list(df[tag])
-            })
+        df.index = pd.to_datetime(df.index, unit='ms', utc=True).tz_convert(tzinfo)
+        # processed_data = {'__timeStamp__':list(df.index)}
+        # for tag in df.columns:
+        #     processed_data.update({
+        #         tag : list(df[tag])
+        #     })
+    return df
 
-    return processed_data
-
-def save(data:dict, rootPath='EXPORTED_DATA\\'):
+def save(dataframe:pd.DataFrame, path = ''):
+    data = dataframe.copy()
+    start = str(data.index[0])
+    end = str(data.index[-1])
+    if len(data.columns):
+        if '_' in data.columns[0]:
+            prefix = data.columns[0][:data.columns[0].index('_')]
+        else:
+            prefix = ''
+        filename = f'DATA_{prefix}_({start}-to-{end}).csv'.replace(':', '-')
     
-    cols = list(data.keys())
-    if '__timeStamp__' in cols:
-        startTimeMs = data['__timeStamp__'][0]
-        endTimeMs  = data['__timeStamp__'][-1]
-        startTimeStr = datetime.datetime.utcfromtimestamp(startTimeMs/1000).strftime('%Y-%m-%d-%H-%M')
-        endTimeStr   = datetime.datetime.utcfromtimestamp(endTimeMs/1000).strftime('%Y-%m-%d-%H-%M')
-        cols.remove('__timeStamp__')
-    
-    prefix = ''
-    if len(cols):
-        if '_' in cols[0]:
-            prefix = cols[0][:cols[0].index('_')]
-
-    if rootPath[-1:]!='\\':
-        rootPath += '\\'
-    filename = rootPath
-    filename += f'DATA_{prefix}_({startTimeStr}--{endTimeStr}).csv'
-
-    output = {
-            f'time ({tzName})':[((t+(tzOffset*1000))/86400000)+25569 for t in data['__timeStamp__']]
-        }
-    output.update({key:data[key] for key in data if key != '__timeStamp__'})
-    df = pd.DataFrame(output)
-    df.to_csv(filename, index=False)
+    # convert time
+    data.index = pd.Series([((t.timestamp()*1000+((5*60*60+30*60)*1000))/86400000)+25569 for t in data.index])
+    data.to_csv(filename)
     pass
 
-def plotTimeSeries(data:dict, cols:list=None):
-    
-    # Get default color style from pandas - can be changed to any other color list
-    if '__timeStamp__' not in data:
-        raise KeyError('No __timeStamp__ axis in data')
-    df = pd.DataFrame({key:data[key] for key in ['__timeStamp__']+cols})
-    df = df.drop(columns=['__timeStamp__'])
-    
-    df.index = pd.to_datetime(data['__timeStamp__'], unit='ms', utc=True).tz_convert(tzinfo)
+def plotTimeSeries(df:pd.DataFrame, cols:list=None):
 
     if cols is None: 
         cols = list(df.columns)
@@ -273,4 +191,3 @@ def plotTimeSeries(data:dict, cols:list=None):
         labels += label
     
     ax.legend(lines, labels)
-    pass
