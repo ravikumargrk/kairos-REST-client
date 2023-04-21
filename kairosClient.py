@@ -174,11 +174,13 @@ def save(dataframe:pd.DataFrame, path = '.'):
     data.to_csv(path + filename)
     pass
 
-def plotTimeSeries(df:pd.DataFrame, cols:list=None):
+def plotTimeSeries(df:pd.DataFrame, cols:list=None, legend=True):
 
     if cols is None: 
         cols = list(df.columns)
     
+    cols = [col for col in cols if col in df.columns]
+
     colors = get_standard_colors(len(cols))
     lines = []
     labels = []
@@ -196,4 +198,7 @@ def plotTimeSeries(df:pd.DataFrame, cols:list=None):
         lines += line
         labels += label
     
-    ax.legend(lines, labels)
+    if legend:
+        ax.legend(lines, labels)
+    
+    return ax
