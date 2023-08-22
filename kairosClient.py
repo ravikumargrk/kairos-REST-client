@@ -8,6 +8,9 @@ TOKEN = ''
 STATUS = ''
 LAST_PAYLOAD = {}
 
+#
+NO_AUTH = True
+
 # remote url paths
 KAIROSDB_AUTH_URL  = os.environ.get('KAIROSDB_AUTH_URL') 
 KAIROSDB_QUERY_URL = os.environ.get('KAIROSDB_QUERY_URL') 
@@ -87,6 +90,34 @@ def runjson(url, body):
     lastResponse = response.json()
     return lastResponse
 
+def runjsonNoAuth(url, body):
+    global STATUS
+    # global TOKEN
+    global LAST_PAYLOAD
+    LAST_PAYLOAD = body
+    # if TOKEN == '':
+    #     STATUS += '\nCreating a new session ...'
+    #     login()
+    
+    STATUS += '\nRunning query try #1'
+    # first try
+    response = requests.post(url, json=body)
+    # second try
+    if response.status_code not in [200, 201]:
+        STATUS += '\nPrevious session must\'ve ended. Logging in again...'
+        login()
+        STATUS += '\nRunning query try #2'
+        response = requests.post(url, json=body)
+
+    if response.status_code not in [200, 201]:
+        STATUS += '\nResponse not received, Code : {}'.format(response.status_code)
+        return None
+    else:
+        STATUS += '\nResponse received.'
+
+    lastResponse = response.json()
+    return lastResponse
+
 # function : to download data into memory
 def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
     """
@@ -126,7 +157,11 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
 
     # Get response
     STATUS += '\nDownloading raw data...'
-    response = runjson(KAIROSDB_QUERY_URL, payload)
+
+    if NO_AUTH:
+        response = runjsonNoAuth(KAIROSDB_QUERY_URL, payload)
+    else:
+        response = runjson(KAIROSDB_QUERY_URL, payload)
 
     data = {}
     # processed_data = {}
@@ -153,7 +188,7 @@ def downloader(tagList:list, startTimeISO:str, endTimeISO:str):
         df.index.name = 'time (ISO)'
     return df
 
-def save(dataframe:pd.DataFrame, path = '.'):
+def save_csv(dataframe:pd.DataFrame, path = '.'):
     data = dataframe.copy()
     start = str(data.index[0])
     end = str(data.index[-1])
@@ -172,6 +207,27 @@ def save(dataframe:pd.DataFrame, path = '.'):
     if path[-1] != '\\':
         path += '\\'
     data.to_csv(path + filename)
+    pass
+
+def save(dataframe:pd.DataFrame, path='.'):
+    df = dataframe.copy()
+    start = str(df.index[0])
+    end = str(df.index[-1])
+
+    timeZoneStr = datetime.datetime.now(tz=df.index.tzinfo).strftime('%z')
+    df[f'timeZone={timeZoneStr}'] = df.index.tz_localize(tz=None)
+    df.set_index(f'timeZone={timeZoneStr}', inplace=True)
+
+    if path[-1] != '\\':
+        path += '\\'
+    if len(df.columns):
+        if '_' in df.columns[0]:
+            prefix = df.columns[0][:df.columns[0].index('_')]
+        else:
+            prefix = ''
+        filename = f'DATA_{prefix}_({start}-to-{end}).xlsx'.replace(':', '-')
+    
+    df.to_excel(path + filename)
     pass
 
 def plotTimeSeries(df:pd.DataFrame, cols:list=None, legend=True):
